@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// KiosKu Firestore security rules.
+//
+// Data model: every shop document lives under users/{uid}/... — one
+// anonymous-first account per shop owner. The only access pattern the app
+// needs is "the signed-in owner reads and writes their own subtree", so
+// the rules say exactly that and deny everything else, including
+// unauthenticated access and cross-account access.
+//
+// The stage-1 healthcheck writes healthcheck/{uid}; it gets the same
+// owner-only treatment. Anything not matched here is denied by the
+// catch-all at the bottom.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Shop profile document: users/{uid}
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // All shop data: ledgerEntries, products, dailyAggregates,
+      // recaps, reports (and any future subcollection).
+      match /{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Stage-1 connectivity probe: healthcheck/{uid}
+    match /healthcheck/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

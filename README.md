@@ -13,10 +13,14 @@ the path that actually ran (`response.inferenceSource`) — "On-device ·
 Gemini Nano" or "Cloud · Gemini" — because in KiosKu the hybrid split *is*
 the product.
 
-> Build status: stage 1 — scaffold, Firebase wiring, hybrid routing engine,
-> App Check debug flow, and the first vertical slice (order-chat parsing)
-> are in place. Ledger persistence in Firestore, the daily recap, and the
-> weekly cloud report land in stage 2.
+> Build status: stage 2 — Firestore shop data (ledger, price book, daily
+> aggregates) behind owner-only security rules, the daily recap
+> (on-device-preferred), the weekly cloud report with supplier-message
+> drafting, a seeded demo warung, and a bilingual EN/ID UI are in place.
+> One manual step remains before the data path works against the live
+> project: deploy `firestore.rules` (see "Firestore security rules"
+> below) — until then the backend's starter rules deny all access and
+> the app says so, verbatim.
 
 ## The hybrid architecture
 
@@ -28,8 +32,8 @@ own `InferenceMode`:
 |---|---|---|
 | Order-chat parsing (short input) | `PREFER_ON_DEVICE` | Small, structured, privacy-sensitive; must work offline at the shop. Falls back to cloud Gemini when Nano is unavailable. |
 | Order-chat parsing (long input) | `ONLY_IN_CLOUD` | Inputs over a Remote Config threshold (`max_ondevice_input_chars`, default 1500) are long-context work — deliberately forced to the cloud model. |
-| Daily recap | `PREFER_ON_DEVICE` | Short summary of today's numbers (stage 2). |
-| Weekly report | `ONLY_IN_CLOUD` | Margins / best sellers / restock plan over a week of ledger data (stage 2). |
+| Daily recap | `PREFER_ON_DEVICE` | Short narrative over today's deterministically computed numbers. |
+| Weekly report | `ONLY_IN_CLOUD` | Margins / best sellers / restock plan / supplier message over a week of ledger data. |
 
 One JSON schema constrains both paths of the parser: it is the cloud
 `responseSchema` and — serialized to plain JSON — the on-device
@@ -42,8 +46,49 @@ routing log the UI renders verbatim.
 **Firebase services used:** AI Logic (hybrid inference), App Check
 (enforced; debug provider locally, reCAPTCHA Enterprise in production),
 Authentication (anonymous-first, Google upgrade via account linking),
-Firestore (shop data; healthcheck round-trip wired in stage 1), Remote
-Config (routing threshold + model selection, tunable without a redeploy).
+Firestore (shop data under `users/{uid}/`: ledger entries, price book,
+daily aggregates, cached recaps and reports; persistent local cache so
+the ledger works on flaky connections), Remote Config (routing
+threshold + model selection, tunable without a redeploy).
+
+All money math is deterministic code (`src/shop/stats.ts`): totals,
+rankings, and margin estimates are computed from the ledger and the
+price book, and the AI features only narrate those figures. Margins are
+estimated only over products whose cost price is known, and the
+coverage share is always shown next to the estimate.
+
+## Firestore security rules
+
+`firestore.rules` (repo root) grants each signed-in user access to
+exactly their own subtree (`users/{uid}/**`, plus their stage-1
+`healthcheck/{uid}` probe document) and denies everything else. The
+project was created with production starter rules that deny all client
+access, so **the rules must be deployed once** before any data path
+works:
+
+**Console paste procedure (project owner):**
+
+1. Open the [Firestore rules editor](https://console.firebase.google.com/project/kiosku-2cda8/firestore/rules)
+   (Firebase console → project **KiosKu** → Firestore Database → Rules).
+2. Select all existing text in the editor and delete it.
+3. Paste the entire contents of `firestore.rules` from this repo.
+4. Click **Publish**. The change is live within about a minute.
+5. Reload the app: the status panel's Firestore healthcheck turns green
+   and the ledger / price book / demo seed start working.
+
+Alternatively, with the Firebase CLI: `firebase deploy --only
+firestore:rules` from the repo root (`firebase.json` already points at
+the rules file).
+
+## Demo warung & language
+
+- **Load demo warung** (in the app) seeds a deterministic demo shop: a
+  15-product price book with cost prices and 7 days of plausible sales,
+  all stored with `source: "demo"` and badged "Demo data" everywhere.
+  No AI call creates it, and **Remove demo data** deletes exactly those
+  documents.
+- The UI is bilingual: **Indonesian by default** (the owner's language),
+  English one tap away via the **ID | EN** toggle in the header.
 
 ## Run it locally
 
@@ -98,10 +143,18 @@ and every result badge shows which path actually executed.
 ```
 src/
   firebase/   config, app + App Check init, auth (anonymous + Google
-              linking), Firestore (healthcheck), Remote Config (routing knobs)
+              linking), Firestore (offline-persistent; healthcheck),
+              Remote Config (routing knobs)
   ai/         routing engine, routing log store, model factory,
-              device-model lifecycle, order parser (schema + validation)
-  App.tsx     status panel, order intake slice, session ledger, routing log
+              device-model lifecycle, order parser, daily recap,
+              weekly report (schema + validation for each)
+  shop/       data model, Firestore data layer (observable store),
+              deterministic stats (totals / margins), demo seed data
+  i18n.ts     EN/ID string table + language store (ID default)
+  App.tsx     status panel, demo card, order intake, Firestore ledger,
+              price book, daily recap, weekly report, routing log
+firestore.rules   owner-only security rules (deploy once — see above)
+firebase.json     hosting + rules wiring
 ```
 
 ## Notes for judges / testers
@@ -111,9 +164,14 @@ src/
 - On a browser without Gemini Nano, all AI features still work via cloud
   Gemini and are badged "Cloud · Gemini". To see the on-device path, use
   Chrome ≥ 139 with the flag above and click "Enable on-device AI".
-- Firestore is in production mode; until the shop security rules deploy
-  (stage 2), the status panel's Firestore healthcheck honestly reports
-  `permission-denied` instead of pretending to succeed.
+- Firestore is in production mode; until the owner-only rules in
+  `firestore.rules` are deployed (one console paste — see "Firestore
+  security rules" above), the status panel's Firestore healthcheck and
+  the ledger honestly report `permission-denied` instead of pretending
+  to succeed.
+- Fastest full tour: tap **Load demo warung**, then **Generate today's
+  recap** and **Generate weekly report**. Switch the UI to English with
+  the **EN** toggle in the header.
 
 ## License
 

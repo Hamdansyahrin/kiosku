@@ -20,6 +20,13 @@ import {
   refreshRemoteConfig,
   type KiosKuRemoteConfig,
 } from "./firebase/remoteConfig";
+import {
+  attachShop,
+  getShopState,
+  subscribeShop,
+  type ShopState,
+} from "./shop/ledger";
+import { getLang, subscribeLang, type Lang } from "./i18n";
 
 export function useAuthState(): AuthState {
   return useSyncExternalStore(subscribeAuth, getAuthState);
@@ -39,6 +46,21 @@ export function useDeviceModelStatus(): DeviceModelStatus {
     void probeDeviceModel();
   }, []);
   return status;
+}
+
+/** The signed-in user's shop data (ledger, price book, daily aggregates),
+ *  live from Firestore. Attaches listeners once the uid is known. */
+export function useShop(uid: string | null): ShopState {
+  const state = useSyncExternalStore(subscribeShop, getShopState);
+  useEffect(() => {
+    if (uid) attachShop(uid);
+  }, [uid]);
+  return state;
+}
+
+/** Current UI language (id default, en one tap away). */
+export function useLang(): Lang {
+  return useSyncExternalStore(subscribeLang, getLang);
 }
 
 /** Remote Config values: defaults immediately, refreshed values when the

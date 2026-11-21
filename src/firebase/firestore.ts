@@ -1,5 +1,7 @@
 import {
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   setDoc,
   getDoc,
@@ -8,7 +10,16 @@ import {
 } from "firebase/firestore";
 import { app } from "./app";
 
-export const db: Firestore = getFirestore(app);
+/**
+ * Firestore with the persistent local cache: the ledger keeps working on
+ * the shop's flaky connection (reads/writes queue locally and sync when
+ * the network returns) — the data-layer half of KiosKu's offline story.
+ */
+export const db: Firestore = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+});
 
 export interface HealthcheckResult {
   ok: boolean;
@@ -28,14 +39,15 @@ function describeError(e: unknown): string {
 
 /**
  * Prove the Firestore path end-to-end: write a `healthcheck/{uid}` document
- * and read it back. Stage 1 uses this to verify project wiring; the shop's
- * real collections (products, orders, ledgerEntries, reports) land in
- * stage 2.
+ * and read it back. Stage 1 uses this to verify project wiring; stage 2
+ * added the shop's real collections (ledgerEntries, products,
+ * dailyAggregates, recaps, reports — see src/shop/).
  *
  * Note: the project was created with Firestore in production mode, whose
- * starter rules deny all client access until real rules are deployed. Until
- * then this returns ok:false with a permission-denied detail — surfaced
- * honestly in the UI rather than hidden.
+ * starter rules deny all client access until the owner-only rules in
+ * firestore.rules (repo root) are deployed. Until then this returns
+ * ok:false with a permission-denied detail — surfaced honestly in the UI
+ * rather than hidden.
  */
 export async function runFirestoreHealthcheck(
   uid: string,
