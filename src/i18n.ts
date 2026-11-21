@@ -82,7 +82,7 @@ const en = {
     "No entries yet — parse the sample order above, or load the demo warung.",
   ledgerLoading: "Loading your shop data…",
   ledgerError:
-    "Shop data could not be loaded. Until the Firestore security rules are deployed, the backend denies access — the exact error is:",
+    "Shop data could not be loaded — the exact backend error is:",
   unknownBuyer: "Unknown buyer",
   priceNa: "price n/a",
   noteLabel: "Note",
@@ -229,7 +229,7 @@ const id: Strings = {
     "Belum ada entri — urai contoh pesanan di atas, atau muat warung demo.",
   ledgerLoading: "Memuat data toko Anda…",
   ledgerError:
-    "Data toko tidak dapat dimuat. Sampai aturan keamanan Firestore diterapkan, backend menolak akses — error persisnya:",
+    "Data toko tidak dapat dimuat — error persis dari backend:",
   unknownBuyer: "Pembeli tak dikenal",
   priceNa: "harga tdk ada",
   noteLabel: "Catatan",
